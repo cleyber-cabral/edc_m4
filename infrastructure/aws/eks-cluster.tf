@@ -1,43 +1,38 @@
-module "eks" {
-  source          = "terraform-aws-modules/eks/aws"
-  cluster_name    = local.cluster_name
-  cluster_version = "1.20"
-  subnets         = module.vpc.private_subnets
+resource "aws_eks_cluster" "k8s-acc" {
+  name     = var.cluster_name
+  version  = var.kubernetes_version
+  role_arn = aws_iam_role.k8s-acc-cluster.arn
 
-  tags = {
-    Environment = "edc-igti"
-    GithubRepo  = "terraform-aws-eks"
-    GithubOrg   = "terraform-aws-modules"
+  vpc_config {
+    subnet_ids = aws_subnet.k8s-acc.*.id
   }
 
-  vpc_id = module.vpc.vpc_id
-
-  workers_group_defaults = {
-    root_volume_type = "gp2"
-  }
-
-  worker_groups = [
-    {
-      name                          = "worker-group-1"
-      instance_type                 = "m5.large"
-      additional_userdata           = "echo foo bar"
-      asg_desired_capacity          = 2
-      additional_security_group_ids = [aws_security_group.worker_group_mgmt_one.id]
-    },
-    {
-      name                          = "worker-group-2"
-      instance_type                 = "m5.large"
-      additional_userdata           = "echo foo bar"
-      additional_security_group_ids = [aws_security_group.worker_group_mgmt_two.id]
-      asg_desired_capacity          = 1
-    },
+  # Ensure that IAM Role permissions are created before and deleted after EKS Cluster handling.
+  # Otherwise, EKS will not be able to properly delete EKS managed EC2 infrastructure such as Security Groups.
+  depends_on = [
+    aws_iam_role_policy_attachment.k8s-acc-AmazonEKSClusterPolicy,
+    aws_iam_role_policy_attachment.k8s-acc-AmazonEKSVPCResourceController,
   ]
 }
 
-data "aws_eks_cluster" "cluster" {
-  name = module.eks.cluster_id
+resource "aws_eks_node_group" "k8s-acc" {
+  cluster_name    = aws_eks_cluster.k8s-acc.name
+  node_group_name = var.cluster_name
+  node_role_arn   = aws_iam_role.k8s-acc-node.arn
+  subnet_ids      = aws_subnet.k8s-acc.*.id
+
+  scaling_config {
+    desired_size = 1
+    max_size     = 1
+    min_size     = 1
+  }
+
+  # Ensure that IAM Role permissions are created before and deleted after EKS Node Group handling.
+  # Otherwise, EKS will not be able to properly delete EC2 Instances and Elastic Network Interfaces.
+  depends_on = [
+    aws_iam_role_policy_attachment.k8s-acc-AmazonEKSWorkerNodePolicy,
+    aws_iam_role_policy_attachment.k8s-acc-AmazonEKS_CNI_Policy,
+    aws_iam_role_policy_attachment.k8s-acc-AmazonEC2ContainerRegistryReadOnly,
+  ]
 }
 
-data "aws_eks_cluster_auth" "cluster" {
-  name = module.eks.cluster_id
-}

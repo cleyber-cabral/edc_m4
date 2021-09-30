@@ -10,8 +10,14 @@ variable "account" {
   default = 545484834876
 }
 
-variable "lambda_function_name"{
-  default = "IGTIexecutaEMR"
+variable "cluster_name"{
+  type = string
+  default = "eks-igti-cleyber"
+}
+
+variable "kubernetes_version" {
+  type    = string
+  default = "1.21"
 }
 
 variable "bucket_names" {
